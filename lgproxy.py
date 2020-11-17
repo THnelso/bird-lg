@@ -35,7 +35,7 @@ from flask import Flask, request, abort
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', dest='config_file', help='path to config file', default='lgproxy.cfg')
-args = parser.parse_args()
+args, unknown_args = parser.parse_known_args()
 
 app = Flask(__name__)
 app.debug = app.config["DEBUG"]
@@ -80,7 +80,7 @@ def traceroute():
         traceroute = traceroute6
         if app.config.get("IPV6_SOURCE", ""):
             src = [ "-s",  app.config.get("IPV6_SOURCE") ]
-    else: 
+    else:
         traceroute = traceroute4
         if app.config.get("IPV4_SOURCE",""):
             src = [ "-s",  app.config.get("IPV4_SOURCE") ]

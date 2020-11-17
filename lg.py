@@ -41,7 +41,7 @@ import pydot
 from flask import Flask, render_template, jsonify, redirect, session, request, abort, Response, Markup
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', dest='config_file', help='path to config file', default='lg.cfg')
-args = parser.parse_args()
+args, unknown_args = parser.parse_known_args()
 
 app = Flask(__name__)
 app.config.from_pyfile(args.config_file)
@@ -158,7 +158,7 @@ def bird_proxy(host, proto, service, query):
     url = "%sq=%s" % (url, quote(query))
 
     try:
-        f = urlopen(url)
+        f = urlopen(url, timeout=app.config.get('TIMEOUT', 5))
         resultat = f.read()
         status = True                # retreive remote status
     except IOError:
@@ -172,7 +172,7 @@ def bird_proxy(host, proto, service, query):
 @app.context_processor
 def inject_commands():
     commands = [
-            ("traceroute", "traceroute ..."),
+            #("traceroute", "traceroute ..."),
             ("summary", "show protocols"),
             ("detail", "show protocols ... all"),
             ("prefix", "show route for ..."),
@@ -183,6 +183,11 @@ def inject_commands():
             ("where_bgpmap", "show route where net ~ [ ... ] (bgpmap)"),
             ("adv", "show route ..."),
             ("adv_bgpmap", "show route ... (bgpmap)"),
+            ("clients", "show route (clients)"),
+            ("protocol", "show route protocol ..."),
+            ("protocol_detail", "show route protocol ... all"),
+            ("export", "show route export ..."),
+            ("export_detail", "show route export ... all"),
         ]
     commands_dict = {}
     for id, text in commands:
@@ -235,7 +240,7 @@ def whois():
     return jsonify(output=output, title=query)
 
 
-SUMMARY_UNWANTED_PROTOS = ["Kernel", "Static", "Device", "Direct"]
+SUMMARY_UNWANTED_PROTOS = ["Kernel", "Static", "Device", "Direct", "Pipe"]
 
 @app.route("/summary/<hosts>")
 @app.route("/summary/<hosts>/<proto>")
@@ -309,7 +314,7 @@ def detail(hosts, proto):
     return render_template('detail.html', detail=detail, command=command, errors=errors)
 
 
-@app.route("/traceroute/<hosts>/<proto>")
+# @app.route("/traceroute/<hosts>/<proto>")
 def traceroute(hosts, proto):
     q = get_query()
 
@@ -380,6 +385,26 @@ def show_route_for_detail(hosts, proto):
 @app.route("/prefix_bgpmap/<hosts>/<proto>")
 def show_route_for_bgpmap(hosts, proto):
     return show_route("prefix_bgpmap", hosts, proto)
+
+@app.route("/clients/<hosts>/<proto>")
+def show_route_clients(hosts, proto):
+    return show_route("clients", hosts, proto)
+
+@app.route("/protocol/<hosts>/<proto>")
+def show_route_protocol(hosts, proto):
+    return show_route("protocol", hosts, proto)
+
+@app.route("/protocol_detail/<hosts>/<proto>")
+def show_route_protocol_detail(hosts, proto):
+    return show_route("protocol_detail", hosts, proto)
+
+@app.route("/export/<hosts>/<proto>")
+def show_route_export(hosts, proto):
+    return show_route("export", hosts, proto)
+
+@app.route("/export_detail/<hosts>/<proto>")
+def show_route_export_detail(hosts, proto):
+    return show_route("export_detail", hosts, proto)
 
 
 def get_as_name(_as):
@@ -621,7 +646,7 @@ def build_as_tree_from_raw_bird_ouput(host, proto, text):
 
 def show_route(request_type, hosts, proto):
     expression = get_query()
-    if not expression:
+    if not expression and request_type != "clients":
         abort(400)
 
     set_session(request_type, hosts, proto, expression)
@@ -633,11 +658,17 @@ def show_route(request_type, hosts, proto):
         all = " all"
 
     if request_type.startswith("adv"):
-        command = "show route " + expression.strip()
+        command = "show route table mux " + expression.strip()
         if bgpmap and not command.endswith("all"):
             command = command + " all"
     elif request_type.startswith("where"):
-        command = "show route where net ~ [ " + expression + " ]" + all
+        command = "show route table mux where net ~ [ " + expression + " ]" + all
+    elif request_type == "clients":
+        command = "show route table mux where proto ~ \"client_*\""
+    elif request_type.startswith("protocol"):
+        command = "show route table mux protocol " + expression + all
+    elif request_type.startswith("export"):
+        command = "show route table mux export " + expression + all
     else:
         mask = ""
         if len(expression.split("/")) == 2:
@@ -664,7 +695,7 @@ def show_route(request_type, hosts, proto):
         if mask:
             expression += "/" + mask
 
-        command = "show route for " + expression + all
+        command = "show route table mux for " + expression + all
 
     detail = {}
     errors = []

@@ -1,4 +1,4 @@
-const noArgReqs = ["summary"];
+const noArgReqs = ["summary", "clients"];
 
 $(window).unload(function(){
 		$(".progress").show()
