@@ -27,7 +27,7 @@ import subprocess
 import logging
 from logging.handlers import TimedRotatingFileHandler
 import re
-from urllib2 import urlopen
+from urllib3 import urlopen
 from urllib import quote, unquote
 import json
 import random
